@@ -1,12 +1,12 @@
-import requests
-from bs4 import BeautifulSoup
+import time
 import csv
 import json
 import re
-import time
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 
 # Configuración del navegador con Selenium
@@ -32,17 +32,28 @@ def obtener_links_productos():
         url = f"{BASE_URL}?page={pagina}"
         print(f"Extrayendo links de: {url}")
         driver.get(url)
-        time.sleep(5)  # Espera a que se cargue la página
-        # Usamos el selector "a.item-link" basado en el HTML mostrado
+        try:
+            # Espera hasta que aparezca al menos un enlace de producto
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "a.item-link"))
+            )
+        except Exception as e:
+            print(f"No se encontraron enlaces en la página {pagina}: {e}")
+            break
+
         elementos = driver.find_elements(By.CSS_SELECTOR, "a.item-link")
         if not elementos:
             print(f"No se encontraron enlaces en la página {pagina}. Terminando.")
             break
+
         for elem in elementos:
             href = elem.get_attribute("href")
-            if href:
+            if href and href not in links:
                 links.append(href)
+        print(f"Página {pagina}: {len(elementos)} enlaces encontrados.")
         pagina += 1
+        time.sleep(2)  # Pausa para no saturar el servidor
+
     return links
 
 def extraer_detalles_producto(url):
@@ -54,8 +65,13 @@ def extraer_detalles_producto(url):
     """
     print(f"Procesando producto: {url}")
     driver.get(url)
-    time.sleep(5)
-    
+    try:
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "meta[name='twitter:title']"))
+        )
+    except Exception as e:
+        print(f"Error esperando meta tag en {url}: {e}")
+
     # Extraer nombre del producto
     nombre = "Sin nombre"
     try:
@@ -63,7 +79,7 @@ def extraer_detalles_producto(url):
         nombre = meta_nombre.get_attribute("content").strip()
     except Exception as e:
         print(f"Error extrayendo nombre en {url}: {e}")
-    
+
     # Buscar en los <script> el fragmento con "LS.variants"
     variantes = []
     try:
@@ -78,7 +94,7 @@ def extraer_detalles_producto(url):
                     break
     except Exception as e:
         print(f"Error extrayendo variantes en {url}: {e}")
-    
+
     registros = []
     for var in variantes:
         sku = var.get("sku", "Sin SKU")
@@ -94,3 +110,34 @@ def extraer_detalles_producto(url):
     return registros
 
 def extraer_todos_los_productos():
+    """
+    Recorre todos los enlaces de productos obtenidos desde la página principal.
+    """
+    todos_productos = []
+    links = obtener_links_productos()
+    print(f"Total de enlaces obtenidos: {len(links)}")
+    for link in links:
+        datos = extraer_detalles_producto(link)
+        if datos:
+            todos_productos.extend(datos)
+        time.sleep(1)  # Pausa para no saturar el servidor
+    return todos_productos
+
+def guardar_en_csv(productos, archivo="productos.csv"):
+    """
+    Guarda la lista de productos en un archivo CSV.
+    """
+    with open(archivo, "w", newline="", encoding="utf-8") as f:
+        fieldnames = ["sku", "nombre", "color", "precio", "enlace"]
+        escritor = csv.DictWriter(f, fieldnames=fieldnames)
+        escritor.writeheader()
+        escritor.writerows(productos)
+
+def main():
+    productos = extraer_todos_los_productos()
+    guardar_en_csv(productos)
+    print(f"Scraping completado. Se guardaron {len(productos)} registros en productos.csv")
+    driver.quit()
+
+if __name__ == "__main__":
+    main()
