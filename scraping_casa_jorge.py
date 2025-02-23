@@ -93,4 +93,4 @@ def extraer_detalles_producto(url):
         })
     return registros
 
-def extraer_todos_los_prod
+def extraer_todos_los_productos():
