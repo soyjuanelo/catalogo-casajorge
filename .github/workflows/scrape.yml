@@ -13,6 +13,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Paso para depurar: muestra la lista de archivos en la raíz.
       - name: List repository files (debug)
         run: ls -la
 
@@ -27,7 +28,8 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run scraping script
-        run: python scraping_casa_jorge.py
+        # Ajustado para ejecutar "scraping_casajorge.py" (sin guion).
+        run: python scraping_casajorge.py
 
       - name: Upload CSV artifact
         uses: actions/upload-artifact@v4
